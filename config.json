@@ -1,0 +1,68 @@
+{
+  "target_trial": {
+    "rct_id": "NCT02578680",
+    "description": "Target trial to predict"
+  },
+  "data_config": {
+    "data_path": "data/trial_data.csv",
+    "target_column": "PFS_median_months",
+    "target_ci_column": "PFS_median_CI",
+    "trial_id_column": "rct_id",
+    "control_arm_column": "is_arm_control",
+    "intervention_outcome_column": "intervention_outcome"
+  },
+  "features": [
+    "gender_male_percent",
+    "age_median",
+    "no_smoker_percent",
+    "ecog_1",
+    "smoker_percent",
+    "brain_metastase_yes",
+    "disease_stage_recurrent",
+    "disease_stage_III",
+    "disease_stage_IV",
+    "EGFR_wild",
+    "EGFR_positive_mutation",
+    "EGFR_TKI",
+    "Platinum_Chemotherapy",
+    "Anti_VEGF",
+    "PD1_PDL1_Inhibitor",
+    "Antimetabolite",
+    "Taxane",
+    "Antibody",
+    "Placebo_Supportive-Care",
+    "Chemotherapy",
+    "Targeted_Therapy",
+    "Immunotherapy",
+    "Anti-angiogenic_Other",
+    "combo_therapy",
+    "treatment_complexity",
+    "RCT_with_control_inter",
+    "Population",
+    "First-in-Class",
+    "Next-Generation"
+  ],
+  "interaction_terms": [
+    {
+      "name": "int_outcome_x_egfr",
+      "feature1": "intervention_outcome",
+      "feature2": "EGFR_TKI"
+    },
+    {
+      "name": "int_outcome_x_immuno",
+      "feature1": "intervention_outcome",
+      "feature2": "PD1_PDL1_Inhibitor"
+    }
+  ],
+  "model_config": {
+    "model_type": "catboost_quantile",
+    "quantiles": [0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975],
+    "catboost_params": {
+      "iterations": 200,
+      "learning_rate": 0.1,
+      "depth": 4,
+      "random_seed": 42,
+      "verbose": false
+    }
+  }
+}
