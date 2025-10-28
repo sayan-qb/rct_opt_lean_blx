@@ -1,14 +1,14 @@
 {
   "ftr_list": [
     "age_median",
-    "gender_male_percent", 
+    "gender_male_percent",
     "no_smoker_percent",
     "ecog_1",
     "brain_metastase_yes",
     "disease_stage_IV",
     "EGFR_positive_mutation",
     "Chemotherapy",
-    "Targeted_Therapy", 
+    "Targeted_Therapy",
     "Immunotherapy",
     "Anti-angiogenic_Other"
   ],
