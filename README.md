@@ -1,6 +1,6 @@
 # RCT Lean Pipeline - LightGBM Implementation
 
-A streamlined machine learning pipeline for predicting treatment effects in randomized controlled trials (RCTs) using LightGBM.
+Approach for predicting treatment effects in randomized controlled trials (RCTs) using LightGBM for a selected trial
 
 ## Overview
 
@@ -12,9 +12,9 @@ The pipeline predicts treatment effects for clinical trials by:
 ## Project Structure
 
 ```
-├── data_preparation.ipynb    # Data preprocessing notebook ✨
-├── rct_pipeline.py          # Main LightGBM prediction pipeline ✨
-├── config.json              # Pipeline configuration ✨
+├── data_alignment.ipynb    # Data preprocessing notebook (notebook to preprocess and align the raw data and the creating the config directly from it for now)
+├── rct_pipeline.py          # Main LightGBM prediction pipeline
+├── config.json              # Pipeline configuration
 ├── data/                    # Processed data directory
 ├── results/                 # Output results directory
 └── 20250521_Trials for dev.xlsx  # Raw data file
@@ -24,23 +24,21 @@ The pipeline predicts treatment effects for clinical trials by:
 
 ### 1. Install Dependencies
 ```bash
-pip install pandas numpy lightgbm scikit-learn openpyxl jupyter
+uv sync
+```
+```bash
+source .venv/bin/activate
 ```
 
 ### 2. Prepare Data
-Run the data preparation notebook:
-```bash
-jupyter notebook data_preparation.ipynb
-```
-This will:
-- Load raw Excel data
+- Loads raw Excel data
 - Create required columns (`rct_id`, `Arm`, `is_target_trial`)
 - Generate processed CSV file
 - Create pipeline configuration
 
 ### 3. Run Prediction Pipeline
 ```bash
-python3 rct_pipeline.py --config config.json --output results/prediction_results.json
+python rct_pipeline.py --config path_to_config.json --output path_to_result.json
 ```
 
 ## Configuration
@@ -107,11 +105,23 @@ Prediction Results:
 ============================================================
 ```
 
+## Implementation Changes from Research Notebooks
+
+This pipeline adapts the methodology from `02_modeling.ipynb` with key modifications:
+
+- **Validation Approach**: Changed from Leave-One-Out cross-validation to single target trial prediction
+- **Feature Engineering**: Simplified approach using features directly from config instead of automatic interaction terms
+- **Intervention Conditioning**: Direct use of target trial's intervention outcome rather than feature-based conditioning
+- **Algorithm Focus**: LightGBM only (notebooks tested multiple approaches)
+- **Output Format**: Structured JSON with `predicted_ate` and `predicted_outcome_control_arm` keys
+
+**Rationale**: Since we'll be aligning with LLM for feature engineering, we kept the feature selection simple and config-driven for now.
+
 ## Algorithm Details
 
 - **Model**: LightGBM with 5-fold cross-validation
 - **Training Data**: Control arms from similar RCTs
-- **Features**: 11 clinical and treatment features
+- **Features**: Config-specified clinical and treatment features (no automatic interaction terms)
 - **Prediction**: Target RCT control arm outcome
 - **ATE Calculation**: Intervention_actual - Control_predicted
 
@@ -123,4 +133,4 @@ Prediction Results:
 
 ---
 
-*Clean, config-driven pipeline implementation - October 2025*
+*Prepared for BlackRock Demo - October 2025*
