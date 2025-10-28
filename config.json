@@ -13,8 +13,8 @@
     "Anti-angiogenic_Other"
   ],
   "target_variable": "PFS_median_months",
-  "rct_id_col_name": "rct_id",
+  "rct_id_col_name": "NCT_ID",
   "arm_type_col_name": "Arm",
   "target_rct_id": "NCT02578680",
-  "data_path": "data/trial_data.csv"
+  "data_path": "data/processed_training_data.csv"
 }
