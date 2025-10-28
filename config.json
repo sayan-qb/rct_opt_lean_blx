@@ -15,6 +15,6 @@
   "target_variable": "PFS_median_months",
   "rct_id_col_name": "NCT_ID",
   "arm_type_col_name": "Arm",
-  "target_rct_id": "NCT02578680",
+  "target_rct_id": "NCT01364012",
   "data_path": "data/processed_training_data.csv"
 }

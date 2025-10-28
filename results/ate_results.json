@@ -1,28 +1,28 @@
 {
-  "predicted_ate": 3.06,
-  "predicted_outcome_control_arm": 5.74,
+  "predicted_ate": 2.98,
+  "predicted_outcome_control_arm": 6.22,
   "metadata": {
     "pipeline_version": "3.0.0",
     "model_type": "lightgbm",
-    "prediction_date": "2025-10-28T15:23:17.625815",
-    "n_training_samples": 31,
+    "prediction_date": "2025-10-28T17:40:11.186058",
+    "n_training_samples": 24,
     "n_features": 11,
-    "cv_rmse": 1.371,
-    "cv_std": 0.556,
-    "train_rmse": 1.264,
-    "train_mae": 0.911
+    "cv_rmse": 1.947,
+    "cv_std": 0.607,
+    "train_rmse": 1.783,
+    "train_mae": 1.426
   },
   "prediction_details": {
-    "target_rct_id": "NCT02578680",
-    "intervention_actual": 8.8,
-    "control_predicted": 5.74,
-    "ate_calculation": "8.8 - 5.74 = 3.06"
+    "target_rct_id": "NCT01364012",
+    "intervention_actual": 9.2,
+    "control_predicted": 6.22,
+    "ate_calculation": "9.2 - 6.22 = 2.98"
   },
   "model_performance": {
-    "cross_validation_rmse": 1.371,
-    "cross_validation_std": 0.556,
-    "training_rmse": 1.264,
-    "training_mae": 0.911
+    "cross_validation_rmse": 1.947,
+    "cross_validation_std": 0.607,
+    "training_rmse": 1.783,
+    "training_mae": 1.426
   },
   "features_used": [
     "age_median",
@@ -52,9 +52,9 @@
       "Anti-angiogenic_Other"
     ],
     "target_variable": "PFS_median_months",
-    "rct_id_col_name": "rct_id",
+    "rct_id_col_name": "NCT_ID",
     "arm_type_col_name": "Arm",
-    "target_rct_id": "NCT02578680",
-    "data_path": "data/trial_data.csv"
+    "target_rct_id": "NCT01364012",
+    "data_path": "data/processed_training_data.csv"
   }
 }
