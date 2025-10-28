@@ -41,6 +41,279 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
+class RCTDataValidationError(Exception):
+    """Custom exception for RCT data validation errors with user-friendly messages."""
+    pass
+
+
+class RCTDataValidator:
+    """
+    Comprehensive data validation for RCT pipeline with user-friendly error messages.
+    Designed for frontend deployment with clear, actionable error descriptions.
+    """
+    
+    @staticmethod
+    def validate_config(config: Dict[str, Any]) -> None:
+        """Validate configuration parameters."""
+        
+        # Check required keys
+        required_keys = [
+            'ftr_list', 'target_variable', 'rct_id_col_name', 
+            'arm_type_col_name', 'target_rct_id', 'data_path'
+        ]
+        
+        missing_keys = [key for key in required_keys if key not in config]
+        if missing_keys:
+            raise RCTDataValidationError(
+                f"Configuration Error: Missing required parameters: {', '.join(missing_keys)}. "
+                f"Please ensure your configuration file includes all required fields."
+            )
+        
+        # Validate feature list
+        if not isinstance(config['ftr_list'], list):
+            raise RCTDataValidationError(
+                "Configuration Error: 'ftr_list' must be a list of feature names. "
+                "Please provide features as an array of strings."
+            )
+        
+        if len(config['ftr_list']) == 0:
+            raise RCTDataValidationError(
+                "Configuration Error: Feature list is empty. "
+                "Please specify at least one feature for the model to use."
+            )
+        
+        # Validate string parameters
+        string_params = ['target_variable', 'rct_id_col_name', 'arm_type_col_name', 'target_rct_id', 'data_path']
+        for param in string_params:
+            if not isinstance(config[param], str) or config[param].strip() == "":
+                raise RCTDataValidationError(
+                    f"Configuration Error: '{param}' must be a non-empty string. "
+                    f"Current value: '{config[param]}'"
+                )
+    
+    @staticmethod
+    def validate_data_file(data_path: str) -> pd.DataFrame:
+        """Validate and load data file with comprehensive checks."""
+        
+        # Check file existence
+        if not os.path.exists(data_path):
+            raise RCTDataValidationError(
+                f"Data File Error: File '{data_path}' not found. "
+                f"Please ensure the data file exists and the path is correct."
+            )
+        
+        # Check file extension
+        valid_extensions = ['.csv', '.xlsx', '.xls']
+        file_ext = os.path.splitext(data_path)[1].lower()
+        if file_ext not in valid_extensions:
+            raise RCTDataValidationError(
+                f"Data File Error: Unsupported file format '{file_ext}'. "
+                f"Please provide data in one of these formats: {', '.join(valid_extensions)}"
+            )
+        
+        # Load data
+        try:
+            if file_ext in ['.xlsx', '.xls']:
+                df = pd.read_excel(data_path)
+            else:
+                df = pd.read_csv(data_path)
+        except Exception as e:
+            raise RCTDataValidationError(
+                f"Data File Error: Unable to read file '{data_path}'. "
+                f"File may be corrupted or in an invalid format. Error: {str(e)}"
+            )
+        
+        # Check if file is empty
+        if df.empty:
+            raise RCTDataValidationError(
+                "Data File Error: The uploaded file is empty. "
+                "Please provide a file with trial data."
+            )
+        
+        # Check minimum data requirements
+        if len(df) < 3:
+            raise RCTDataValidationError(
+                f"Data File Error: Insufficient data - only {len(df)} rows found. "
+                f"At least 3 rows of trial data are required for modeling."
+            )
+        
+        return df
+    
+    @staticmethod
+    def validate_data_structure(df: pd.DataFrame, config: Dict[str, Any]) -> None:
+        """Validate data structure and required columns."""
+        
+        # Check required columns exist
+        required_cols = [
+            config['rct_id_col_name'],
+            config['arm_type_col_name'], 
+            config['target_variable']
+        ]
+        
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            available_cols = list(df.columns)
+            raise RCTDataValidationError(
+                f"Data Structure Error: Missing required columns: {', '.join(missing_cols)}. "
+                f"Available columns: {', '.join(available_cols)}. "
+                f"Please ensure your data includes all required columns."
+            )
+        
+        # Check feature columns exist
+        missing_features = [f for f in config['ftr_list'] if f not in df.columns]
+        if missing_features:
+            available_cols = list(df.columns)
+            raise RCTDataValidationError(
+                f"Feature Error: Missing feature columns: {', '.join(missing_features)}. "
+                f"Available columns: {', '.join(available_cols)}. "
+                f"Please update your feature list or add missing columns to your data."
+            )
+    
+    @staticmethod
+    def validate_target_rct(df: pd.DataFrame, config: Dict[str, Any]) -> None:
+        """Validate target RCT exists in data."""
+        
+        rct_id_col = config['rct_id_col_name']
+        target_rct_id = config['target_rct_id']
+        
+        # Check if target RCT exists
+        if target_rct_id not in df[rct_id_col].values:
+            available_rcts = df[rct_id_col].unique().tolist()
+            raise RCTDataValidationError(
+                f"Target RCT Error: RCT '{target_rct_id}' not found in data. "
+                f"Available RCTs: {', '.join(map(str, available_rcts))}. "
+                f"Please specify a valid RCT ID from your dataset."
+            )
+    
+    @staticmethod
+    def validate_arm_types(df: pd.DataFrame, config: Dict[str, Any]) -> None:
+        """Validate arm type values."""
+        
+        arm_type_col = config['arm_type_col_name']
+        expected_arms = ['Intervention', 'Control']
+        
+        # Check arm type values
+        unique_arms = df[arm_type_col].unique()
+        invalid_arms = [arm for arm in unique_arms if arm not in expected_arms]
+        
+        if invalid_arms:
+            raise RCTDataValidationError(
+                f"Arm Type Error: Invalid arm types found: {', '.join(map(str, invalid_arms))}. "
+                f"Expected values: {', '.join(expected_arms)}. "
+                f"Please ensure arm types are labeled as 'Intervention' or 'Control' only."
+            )
+        
+        # Check if we have both arm types in the dataset
+        if len(unique_arms) < 2:
+            raise RCTDataValidationError(
+                f"Arm Type Error: Only found arm type(s): {', '.join(map(str, unique_arms))}. "
+                f"Dataset must contain both 'Intervention' and 'Control' arms for modeling."
+            )
+    
+    @staticmethod
+    def validate_numerical_features(df: pd.DataFrame, config: Dict[str, Any]) -> None:
+        """Validate that features are numerical and suitable for modeling."""
+        
+        feature_issues = []
+        
+        for feature in config['ftr_list']:
+            feature_data = df[feature]
+            
+            # Check if feature is numeric
+            if not pd.api.types.is_numeric_dtype(feature_data):
+                non_numeric_values = feature_data.dropna().astype(str).unique()[:5]  # Show first 5 unique values
+                feature_issues.append(
+                    f"'{feature}' contains non-numeric data (examples: {', '.join(non_numeric_values)})"
+                )
+                continue
+            
+            # Check for excessive missing values
+            missing_pct = (feature_data.isna().sum() / len(feature_data)) * 100
+            if missing_pct > 80:
+                feature_issues.append(
+                    f"'{feature}' has {missing_pct:.1f}% missing values (too high for reliable modeling)"
+                )
+            
+            # Check for constant values
+            if feature_data.nunique() <= 1:
+                feature_issues.append(
+                    f"'{feature}' has constant values (no variation for modeling)"
+                )
+        
+        if feature_issues:
+            raise RCTDataValidationError(
+                f"Feature Validation Error: Issues found with features:\n" +
+                "\n".join([f"- {issue}" for issue in feature_issues]) +
+                "\nPlease clean your data or update your feature list."
+            )
+    
+    @staticmethod
+    def validate_target_variable(df: pd.DataFrame, config: Dict[str, Any]) -> None:
+        """Validate target variable quality."""
+        
+        target_col = config['target_variable']
+        target_data = df[target_col]
+        
+        # Check if target is numeric
+        if not pd.api.types.is_numeric_dtype(target_data):
+            raise RCTDataValidationError(
+                f"Target Variable Error: '{target_col}' must be numeric for regression modeling. "
+                f"Current data type: {target_data.dtype}. "
+                f"Please ensure the target variable contains numerical values."
+            )
+        
+        # Check for missing values in target
+        missing_count = target_data.isna().sum()
+        if missing_count > 0:
+            missing_pct = (missing_count / len(target_data)) * 100
+            if missing_pct > 20:
+                raise RCTDataValidationError(
+                    f"Target Variable Error: '{target_col}' has {missing_pct:.1f}% missing values. "
+                    f"Too many missing target values for reliable modeling. "
+                    f"Please provide more complete target data."
+                )
+        
+        # Check for reasonable target values (basic sanity check)
+        valid_targets = target_data.dropna()
+        if len(valid_targets) == 0:
+            raise RCTDataValidationError(
+                f"Target Variable Error: No valid values found in '{target_col}'. "
+                f"Please provide valid numerical target data."
+            )
+        
+        # Check for negative values if this is a time-based outcome (common in RCTs)
+        if (valid_targets < 0).any():
+            raise RCTDataValidationError(
+                f"Target Variable Error: '{target_col}' contains negative values. "
+                f"For time-based outcomes (like PFS), values should be positive. "
+                f"Please check your data for errors."
+            )
+    
+    @staticmethod
+    def validate_training_data_sufficiency(df: pd.DataFrame, config: Dict[str, Any]) -> None:
+        """Validate sufficient training data for modeling."""
+        
+        # Get control arms excluding target RCT
+        control_arms = df[df[config['arm_type_col_name']] == 'Control']
+        training_arms = control_arms[control_arms[config['rct_id_col_name']] != config['target_rct_id']]
+        
+        if len(training_arms) < 3:
+            raise RCTDataValidationError(
+                f"Training Data Error: Only {len(training_arms)} control arms available for training "
+                f"(excluding target RCT). Minimum 3 control arms required for reliable modeling. "
+                f"Please provide more trial data."
+            )
+        
+        # Check if we have enough features relative to training samples
+        n_features = len(config['ftr_list'])
+        if len(training_arms) < n_features:
+            raise RCTDataValidationError(
+                f"Training Data Error: Not enough training samples ({len(training_arms)}) "
+                f"for the number of features ({n_features}). "
+                f"Consider reducing features or adding more trial data."
+            )
+
+
 class RCTLightGBMPipeline:
     """
     RCT Model Pipeline using LightGBM for target vs similar trials prediction.
@@ -71,33 +344,29 @@ class RCTLightGBMPipeline:
         logger.info(f"Target variable: {self.target_variable}")
         
     def _load_config(self, config_path: str) -> Dict[str, Any]:
-        """Load configuration from JSON file."""
+        """Load and validate configuration from JSON file."""
         if not config_path:
-            raise ValueError("Config file path is required. Please provide a config.json file.")
+            raise RCTDataValidationError("Configuration Error: Config file path is required. Please provide a config.json file.")
         
         if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Configuration file not found: {config_path}")
+            raise RCTDataValidationError(f"Configuration Error: Configuration file '{config_path}' not found. Please check the file path.")
         
         try:
             with open(config_path, 'r') as f:
                 config = json.load(f)
                 logger.info(f"Configuration loaded from {config_path}")
                 
-                # Validate required config keys
-                required_keys = [
-                    'ftr_list', 'target_variable', 'rct_id_col_name', 
-                    'arm_type_col_name', 'target_rct_id', 'data_path'
-                ]
-                for key in required_keys:
-                    if key not in config:
-                        raise ValueError(f"Missing required config key: {key}")
+                # Validate configuration
+                RCTDataValidator.validate_config(config)
                 
                 return config
                 
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in config file: {e}")
+            raise RCTDataValidationError(f"Configuration Error: Invalid JSON format in config file. Please check your JSON syntax. Error: {str(e)}")
+        except RCTDataValidationError:
+            raise  # Re-raise validation errors as-is
         except Exception as e:
-            raise ValueError(f"Error loading config file: {e}")
+            raise RCTDataValidationError(f"Configuration Error: Unable to load config file. {str(e)}")
     
     def predict_target_rct(self) -> Dict[str, Any]:
         """
@@ -119,37 +388,33 @@ class RCTLightGBMPipeline:
         return result
     
     def _load_data(self, data_path: str) -> pd.DataFrame:
-        """Load data from CSV or Excel file."""
+        """Load and validate data from CSV or Excel file."""
         logger.info(f"Loading data from {data_path}")
         
-        if not os.path.exists(data_path):
-            raise FileNotFoundError(f"Data file not found: {data_path}")
+        # Load and validate data file
+        df = RCTDataValidator.validate_data_file(data_path)
+        logger.info(f"Loaded dataset shape: {df.shape}")
         
-        try:
-            # Determine file type and load accordingly
-            if data_path.endswith('.xlsx') or data_path.endswith('.xls'):
-                df = pd.read_excel(data_path)
-            else:
-                df = pd.read_csv(data_path)
-                
-            logger.info(f"Loaded dataset shape: {df.shape}")
-            
-            # Validate required columns exist
-            required_cols = [
-                self.rct_id_col,
-                self.arm_type_col,
-                self.target_variable
-            ]
-            
-            missing_cols = [col for col in required_cols if col not in df.columns]
-            if missing_cols:
-                raise ValueError(f"Missing required columns in data: {missing_cols}")
-            
-            return df
-            
-        except Exception as e:
-            logger.error(f"Error loading data file: {e}")
-            raise
+        # Validate data structure
+        RCTDataValidator.validate_data_structure(df, self.config)
+        
+        # Validate target RCT exists
+        RCTDataValidator.validate_target_rct(df, self.config)
+        
+        # Validate arm types
+        RCTDataValidator.validate_arm_types(df, self.config)
+        
+        # Validate numerical features
+        RCTDataValidator.validate_numerical_features(df, self.config)
+        
+        # Validate target variable
+        RCTDataValidator.validate_target_variable(df, self.config)
+        
+        # Validate training data sufficiency
+        RCTDataValidator.validate_training_data_sufficiency(df, self.config)
+        
+        logger.info("Data validation completed successfully")
+        return df
     
     def _preprocess_data(self, df: pd.DataFrame) -> tuple:
         """
@@ -463,18 +728,38 @@ class RCTLightGBMPipeline:
 
 
 def main():
-    """Main function for command-line usage."""
+    """Main function for command-line usage with comprehensive error handling."""
     parser = argparse.ArgumentParser(description='RCT Model Pipeline - LightGBM Implementation')
     parser.add_argument('--config', required=True, help='Path to configuration JSON file')
     parser.add_argument('--output', help='Path for output results file')
     
     args = parser.parse_args()
     
-    # Initialize pipeline
-    pipeline = RCTLightGBMPipeline(config_path=args.config)
-    
-    # Make prediction
-    results = pipeline.predict_target_rct()
+    try:
+        # Initialize pipeline (includes config validation)
+        pipeline = RCTLightGBMPipeline(config_path=args.config)
+        
+        # Make prediction (includes data validation)
+        results = pipeline.predict_target_rct()
+        
+    except RCTDataValidationError as e:
+        logger.error(f"Validation Error: {str(e)}")
+        print("\n" + "="*60)
+        print("RCT PIPELINE VALIDATION ERROR")
+        print("="*60)
+        print(f"\n{str(e)}")
+        print("\n" + "="*60)
+        return 1
+        
+    except Exception as e:
+        logger.error(f"Unexpected Error: {str(e)}")
+        print("\n" + "="*60)
+        print("RCT PIPELINE UNEXPECTED ERROR")
+        print("="*60)
+        print(f"\nAn unexpected error occurred: {str(e)}")
+        print("Please check your data and configuration, or contact support.")
+        print("\n" + "="*60)
+        return 1
     
     # Save to specified output file if provided
     if args.output:
@@ -508,7 +793,10 @@ def main():
             print(f"  ATE (Predicted): {details['ate_predicted']} months")
     
     print("="*60)
+    
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit_code = main()
+    exit(exit_code)
