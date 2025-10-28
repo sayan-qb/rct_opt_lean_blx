@@ -4,7 +4,7 @@
   "metadata": {
     "pipeline_version": "3.0.0",
     "model_type": "lightgbm",
-    "prediction_date": "2025-10-28T11:43:10.940280",
+    "prediction_date": "2025-10-28T15:23:17.625815",
     "n_training_samples": 31,
     "n_features": 11,
     "cv_rmse": 1.371,
@@ -54,7 +54,6 @@
     "target_variable": "PFS_median_months",
     "rct_id_col_name": "rct_id",
     "arm_type_col_name": "Arm",
-    "is_target_rct": "is_target_trial",
     "target_rct_id": "NCT02578680",
     "data_path": "data/trial_data.csv"
   }

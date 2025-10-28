@@ -12,7 +12,7 @@ Config structure:
 - target_variable: outcome variable name
 - rct_id_col_name: column name for RCT IDs
 - arm_type_col_name: column with "Intervention" or "Control" values
-- is_target_rct: column flagging the target RCT
+- target_rct_id: specific RCT ID to use as target
 - data_path: path to the data file
 
 Usage:
@@ -63,7 +63,6 @@ class RCTLightGBMPipeline:
         self.target_variable = self.config['target_variable']
         self.rct_id_col = self.config['rct_id_col_name']
         self.arm_type_col = self.config['arm_type_col_name']
-        self.target_flag_col = self.config['is_target_rct']
         self.target_rct_id = self.config['target_rct_id']
         self.data_path = self.config['data_path']
         
@@ -87,7 +86,7 @@ class RCTLightGBMPipeline:
                 # Validate required config keys
                 required_keys = [
                     'ftr_list', 'target_variable', 'rct_id_col_name', 
-                    'arm_type_col_name', 'is_target_rct', 'target_rct_id', 'data_path'
+                    'arm_type_col_name', 'target_rct_id', 'data_path'
                 ]
                 for key in required_keys:
                     if key not in config:
@@ -139,8 +138,7 @@ class RCTLightGBMPipeline:
             required_cols = [
                 self.rct_id_col,
                 self.arm_type_col,
-                self.target_variable,
-                self.target_flag_col
+                self.target_variable
             ]
             
             missing_cols = [col for col in required_cols if col not in df.columns]

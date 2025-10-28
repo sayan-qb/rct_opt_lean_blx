@@ -51,7 +51,6 @@ Edit `config.json` to specify:
   "target_variable": "PFS_median_months",
   "rct_id_col_name": "rct_id", 
   "arm_type_col_name": "Arm",
-  "is_target_rct": "is_target_trial",
   "target_rct_id": "NCT02578680",
   "data_path": "data/trial_data.csv"
 }
@@ -86,7 +85,7 @@ Your Excel file should contain:
 - **Arm**: "Control" or "Intervention" 
 - **PFS_median_months**: Target outcome variable
 - **Feature columns**: As specified in `ftr_list` config
-- **Target RCT**: Specified by `target_rct_id` in config (e.g., "NCT02578680")
+- **Target RCT**: Specified directly by `target_rct_id` in config (e.g., "NCT02578680")
 
 ## Example Output
 
