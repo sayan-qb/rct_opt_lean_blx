@@ -4,7 +4,7 @@
   "metadata": {
     "pipeline_version": "3.0.0",
     "model_type": "lightgbm",
-    "prediction_date": "2025-10-28T09:12:24.507224",
+    "prediction_date": "2025-10-28T09:37:31.793957",
     "n_training_samples": 31,
     "n_features": 11,
     "cv_rmse": 1.371,

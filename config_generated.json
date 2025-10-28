@@ -1,0 +1,20 @@
+{
+  "ftr_list": [
+    "age_median",
+    "gender_male_percent",
+    "no_smoker_percent",
+    "ecog_1",
+    "brain_metastase_yes",
+    "disease_stage_IV",
+    "EGFR_positive_mutation",
+    "Chemotherapy",
+    "Targeted_Therapy",
+    "Immunotherapy",
+    "Anti-angiogenic_Other"
+  ],
+  "target_variable": "PFS_median_months",
+  "rct_id_col_name": "rct_id",
+  "arm_type_col_name": "Arm",
+  "is_target_rct": "is_target_trial",
+  "data_path": "data/trial_data.csv"
+}
