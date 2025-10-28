@@ -64,6 +64,7 @@ class RCTLightGBMPipeline:
         self.rct_id_col = self.config['rct_id_col_name']
         self.arm_type_col = self.config['arm_type_col_name']
         self.target_flag_col = self.config['is_target_rct']
+        self.target_rct_id = self.config['target_rct_id']
         self.data_path = self.config['data_path']
         
         logger.info(f"RCT LightGBM Pipeline initialized")
@@ -86,7 +87,7 @@ class RCTLightGBMPipeline:
                 # Validate required config keys
                 required_keys = [
                     'ftr_list', 'target_variable', 'rct_id_col_name', 
-                    'arm_type_col_name', 'is_target_rct', 'data_path'
+                    'arm_type_col_name', 'is_target_rct', 'target_rct_id', 'data_path'
                 ]
                 for key in required_keys:
                     if key not in config:
@@ -162,18 +163,16 @@ class RCTLightGBMPipeline:
         """
         logger.info("Preprocessing data...")
         
-        # Get target RCT
-        target_rct_mask = df[self.target_flag_col] == 1
-        target_rct_data = df[target_rct_mask].copy()
+        # Get target RCT by ID
+        target_rct_data = df[df[self.rct_id_col] == self.target_rct_id].copy()
         
         if target_rct_data.empty:
-            raise ValueError("No target RCT found in data (is_target_rct == 1)")
+            raise ValueError(f"Target RCT '{self.target_rct_id}' not found in data")
         
-        target_rct_id = target_rct_data[self.rct_id_col].iloc[0]
-        logger.info(f"Target RCT ID: {target_rct_id}")
+        logger.info(f"Target RCT ID: {self.target_rct_id}")
         
         # Get similar RCTs (all RCTs except target)
-        similar_rcts_data = df[~target_rct_mask].copy()
+        similar_rcts_data = df[df[self.rct_id_col] != self.target_rct_id].copy()
         
         if similar_rcts_data.empty:
             raise ValueError("No similar RCTs found for training")
