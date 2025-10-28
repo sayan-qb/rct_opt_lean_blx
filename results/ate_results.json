@@ -1,0 +1,72 @@
+{
+  "predicted_ate": 3.92,
+  "predicted_outcome_control_arm": 5.28,
+  "metadata": {
+    "pipeline_version": "4.0.0",
+    "model_type": "lightgbm_with_intervention_conditioning",
+    "prediction_date": "2025-10-28T17:24:34.302904",
+    "n_training_samples": 24,
+    "n_features": 16,
+    "cv_rmse": 1.117,
+    "cv_std": 0.445,
+    "train_rmse": 0.184,
+    "train_mae": 0.106
+  },
+  "prediction_details": {
+    "target_rct_id": "NCT01364012",
+    "intervention_actual": 9.2,
+    "control_actual": 6.5,
+    "control_predicted": 5.28,
+    "intervention_outcome_conditioning": 9.2,
+    "ate_actual": 2.7,
+    "ate_predicted": 3.92,
+    "prediction_method": "intervention_outcome_conditioning",
+    "data_structure": "paired_arms"
+  },
+  "model_performance": {
+    "cross_validation_rmse": 1.117,
+    "cross_validation_std": 0.445,
+    "training_rmse": 0.184,
+    "training_mae": 0.106
+  },
+  "features_used": [
+    "age_median",
+    "gender_male_percent",
+    "no_smoker_percent",
+    "ecog_1",
+    "brain_metastase_yes",
+    "disease_stage_IV",
+    "EGFR_positive_mutation",
+    "Chemotherapy",
+    "Targeted_Therapy",
+    "Immunotherapy",
+    "Anti-angiogenic_Other",
+    "EGFR_TKI",
+    "PD1_PDL1_Inhibitor",
+    "intervention_outcome_feature",
+    "int_outcome_x_egfr",
+    "int_outcome_x_immuno"
+  ],
+  "config_used": {
+    "ftr_list": [
+      "age_median",
+      "gender_male_percent",
+      "no_smoker_percent",
+      "ecog_1",
+      "brain_metastase_yes",
+      "disease_stage_IV",
+      "EGFR_positive_mutation",
+      "Chemotherapy",
+      "Targeted_Therapy",
+      "Immunotherapy",
+      "Anti-angiogenic_Other",
+      "EGFR_TKI",
+      "PD1_PDL1_Inhibitor"
+    ],
+    "target_variable": "PFS_median_months",
+    "rct_id_col_name": "NCT_ID",
+    "arm_type_col_name": "Arm",
+    "target_rct_id": "NCT01364012",
+    "data_path": "data/processed_training_data.csv"
+  }
+}

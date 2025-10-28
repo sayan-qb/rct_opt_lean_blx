@@ -184,28 +184,117 @@ class RCTLightGBMPipeline:
         
         return target_rct_data, similar_rcts_data
     
-    def _predict_with_lightgbm(self, target_rct_data: pd.DataFrame, similar_rcts_data: pd.DataFrame) -> Dict[str, Any]:
-        """Make prediction using LightGBM."""
-        logger.info("Training LightGBM model...")
+    def _add_intervention_outcome_conditioning(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add intervention outcome conditioning features based on the methodology from the modeling notebook.
         
-        # Prepare training data from similar RCTs (control arms only)
-        control_arms = similar_rcts_data[similar_rcts_data[self.arm_type_col] == 'Control'].copy()
+        For each trial with both intervention and control arms:
+        - When predicting control outcome, use the intervention outcome as a feature
+        - This helps the model understand the trial-specific context
+        
+        Returns:
+            Enhanced dataset with intervention outcome conditioning features
+        """
+        logger.info("Adding intervention outcome conditioning features...")
+        
+        enhanced_data = data.copy()
+        
+        # Find trials that have both intervention and control arms
+        trial_arm_counts = data.groupby(self.rct_id_col)[self.arm_type_col].nunique()
+        paired_trials = trial_arm_counts[trial_arm_counts == 2].index
+        
+        logger.info(f"Found {len(paired_trials)} trials with both intervention and control arms")
+        
+        # For each trial with paired arms, add intervention outcome as feature for control arm
+        enhanced_data['intervention_outcome_feature'] = np.nan
+        
+        for trial_id in paired_trials:
+            trial_data = data[data[self.rct_id_col] == trial_id]
+            
+            # Get intervention and control outcomes for this trial
+            intervention_row = trial_data[trial_data[self.arm_type_col] == 'Intervention']
+            control_row = trial_data[trial_data[self.arm_type_col] == 'Control']
+            
+            if not intervention_row.empty and not control_row.empty:
+                intervention_outcome = intervention_row[self.target_variable].iloc[0]
+                
+                # Add intervention outcome as feature for control arm
+                control_idx = enhanced_data[
+                    (enhanced_data[self.rct_id_col] == trial_id) & 
+                    (enhanced_data[self.arm_type_col] == 'Control')
+                ].index
+                
+                enhanced_data.loc[control_idx, 'intervention_outcome_feature'] = intervention_outcome
+                
+                logger.debug(f"Trial {trial_id}: Added intervention outcome {intervention_outcome:.2f} as feature for control arm")
+        
+        # For unpaired trials (single-arm), we can't use this feature - fill with 0 or mean
+        unpaired_mask = enhanced_data['intervention_outcome_feature'].isna()
+        n_unpaired = unpaired_mask.sum()
+        
+        if n_unpaired > 0:
+            logger.info(f"Found {n_unpaired} unpaired arms - filling with mean intervention outcome")
+            # Use mean intervention outcome from all intervention arms
+            mean_intervention = data[data[self.arm_type_col] == 'Intervention'][self.target_variable].mean()
+            enhanced_data.loc[unpaired_mask, 'intervention_outcome_feature'] = mean_intervention
+        
+        # Add interaction terms with drug classes (if available)
+        if 'EGFR_TKI' in enhanced_data.columns:
+            enhanced_data['int_outcome_x_egfr'] = enhanced_data['intervention_outcome_feature'] * enhanced_data['EGFR_TKI']
+            logger.info("Created interaction: intervention_outcome × EGFR_TKI")
+        
+        if 'PD1_PDL1_Inhibitor' in enhanced_data.columns:
+            enhanced_data['int_outcome_x_immuno'] = enhanced_data['intervention_outcome_feature'] * enhanced_data['PD1_PDL1_Inhibitor']
+            logger.info("Created interaction: intervention_outcome × PD1_PDL1_Inhibitor")
+        
+        logger.info(f"Enhanced dataset shape: {enhanced_data.shape}")
+        logger.info(f"Intervention outcome conditioning added for control arms")
+        
+        return enhanced_data
+    
+    def _predict_with_lightgbm(self, target_rct_data: pd.DataFrame, similar_rcts_data: pd.DataFrame) -> Dict[str, Any]:
+        """Make prediction using LightGBM with intervention outcome conditioning."""
+        logger.info("Training LightGBM model with intervention outcome conditioning...")
+        
+        # Combine all data and add intervention outcome conditioning
+        all_data = pd.concat([target_rct_data, similar_rcts_data], ignore_index=True)
+        enhanced_data = self._add_intervention_outcome_conditioning(all_data)
+        
+        # Filter to control arms only for training
+        control_arms = enhanced_data[enhanced_data[self.arm_type_col] == 'Control'].copy()
         
         if control_arms.empty:
-            raise ValueError("No control arms found in similar RCTs for training")
+            raise ValueError("No control arms found for training")
         
-        # Get available features
-        available_features = [f for f in self.features if f in control_arms.columns]
+        # Get available features (including intervention outcome and interaction terms)
+        base_features = [f for f in self.features if f in control_arms.columns]
+        intervention_features = ['intervention_outcome_feature']
+        interaction_features = []
+        
+        # Add interaction features if they exist
+        if 'int_outcome_x_egfr' in control_arms.columns:
+            interaction_features.append('int_outcome_x_egfr')
+        if 'int_outcome_x_immuno' in control_arms.columns:
+            interaction_features.append('int_outcome_x_immuno')
+        
+        available_features = base_features + intervention_features + interaction_features
+        available_features = [f for f in available_features if f in control_arms.columns]
+        
         missing_features = [f for f in self.features if f not in control_arms.columns]
-        
         if missing_features:
-            logger.warning(f"Missing features in data: {missing_features}")
+            logger.warning(f"Missing base features in data: {missing_features}")
         
         logger.info(f"Using {len(available_features)} features for training")
+        logger.info(f"Intervention conditioning features: {[f for f in available_features if 'intervention' in f.lower() or 'int_outcome' in f]}")
         
-        # Prepare training data
-        X_train = control_arms[available_features].fillna(0)
-        y_train = control_arms[self.target_variable]
+        # Prepare training data (exclude target RCT from training)
+        training_control_arms = control_arms[control_arms[self.rct_id_col] != self.target_rct_id].copy()
+        
+        if training_control_arms.empty:
+            raise ValueError("No control arms from similar RCTs available for training")
+        
+        X_train = training_control_arms[available_features].fillna(0)
+        y_train = training_control_arms[self.target_variable]
         
         # Remove rows with missing target values
         valid_mask = ~y_train.isna()
@@ -217,16 +306,17 @@ class RCTLightGBMPipeline:
         
         logger.info(f"Training data shape: {X_train.shape}")
         
-        # Train LightGBM model
+        # Train LightGBM model with parameters suitable for small datasets
         lgb_params = {
             'objective': 'regression',
             'metric': 'rmse',
             'boosting_type': 'gbdt',
-            'num_leaves': 31,
-            'learning_rate': 0.1,
+            'num_leaves': min(31, max(6, len(X_train) // 3)),
+            'learning_rate': 0.05,
             'feature_fraction': 0.9,
             'bagging_fraction': 0.8,
             'bagging_freq': 5,
+            'min_data_in_leaf': max(1, len(X_train) // 10),
             'verbose': -1,
             'random_state': 42
         }
@@ -255,7 +345,7 @@ class RCTLightGBMPipeline:
         logger.info(f"Cross-validation RMSE: {cv_rmse:.3f} ± {cv_std:.3f}")
         
         # Make predictions for target RCT
-        target_predictions = self._predict_target_arms(model, target_rct_data, available_features)
+        target_predictions = self._predict_target_arms(model, enhanced_data, available_features)
         
         # Calculate metrics
         train_pred = model.predict(X_train)
@@ -267,8 +357,8 @@ class RCTLightGBMPipeline:
             "predicted_ate": target_predictions.get("predicted_ate"),
             "predicted_outcome_control_arm": target_predictions.get("predicted_outcome_control_arm"),
             "metadata": {
-                "pipeline_version": "3.0.0",
-                "model_type": "lightgbm",
+                "pipeline_version": "4.0.0",
+                "model_type": "lightgbm_with_intervention_conditioning",
                 "prediction_date": datetime.now().isoformat(),
                 "n_training_samples": len(X_train),
                 "n_features": len(available_features),
@@ -291,40 +381,82 @@ class RCTLightGBMPipeline:
         logger.info("Prediction completed successfully")
         return result
     
-    def _predict_target_arms(self, model, target_rct_data: pd.DataFrame, available_features: List[str]) -> Dict[str, Any]:
-        """Make predictions for target RCT arms and calculate ATE."""
-        predictions = {}
+    def _predict_target_arms(self, model, enhanced_data: pd.DataFrame, available_features: List[str]) -> Dict[str, Any]:
+        """Make predictions for target RCT using intervention outcome conditioning."""
         
-        # Get target RCT features for prediction (use first row as template)
-        target_features = target_rct_data[available_features].fillna(0).iloc[0:1]
+        # Get target RCT data
+        target_rct = enhanced_data[enhanced_data[self.rct_id_col] == self.target_rct_id]
         
-        # Predict control arm outcome (what the control arm would have been)
-        predicted_control_outcome = model.predict(target_features)[0]
+        if target_rct.empty:
+            raise ValueError(f"Target RCT {self.target_rct_id} not found in enhanced dataset")
         
-        # Get actual intervention outcome from target RCT data
-        intervention_data = target_rct_data[target_rct_data[self.arm_type_col] == 'Intervention']
-        if not intervention_data.empty:
-            actual_intervention_outcome = intervention_data[self.target_variable].iloc[0]
-        else:
-            actual_intervention_outcome = None
+        # Check if target RCT has both intervention and control arms
+        target_arms = target_rct[self.arm_type_col].unique()
+        logger.info(f"Target RCT arms: {target_arms}")
         
-        # Calculate ATE: Intervention - Control
-        if actual_intervention_outcome is not None:
+        # Get intervention and control arms
+        intervention_arm = target_rct[target_rct[self.arm_type_col] == 'Intervention']
+        control_arm = target_rct[target_rct[self.arm_type_col] == 'Control']
+        
+        if not intervention_arm.empty and not control_arm.empty:
+            # Both arms available - predict control using intervention outcome
+            actual_intervention_outcome = intervention_arm[self.target_variable].iloc[0]
+            actual_control_outcome = control_arm[self.target_variable].iloc[0]
+            
+            # Use control arm features with intervention outcome conditioning for prediction
+            control_features = control_arm[available_features].fillna(0)
+            predicted_control_outcome = model.predict(control_features)[0]
+            
+            # Calculate ATE using actual intervention outcome
             predicted_ate = actual_intervention_outcome - predicted_control_outcome
+            
+            logger.info(f"Target RCT has both arms - using intervention conditioning")
+            logger.info(f"Actual control: {actual_control_outcome:.2f}, Predicted control: {predicted_control_outcome:.2f}")
+            
+            prediction_details = {
+                "target_rct_id": self.target_rct_id,
+                "intervention_actual": round(actual_intervention_outcome, 2),
+                "control_actual": round(actual_control_outcome, 2),
+                "control_predicted": round(predicted_control_outcome, 2),
+                "intervention_outcome_conditioning": round(control_arm['intervention_outcome_feature'].iloc[0], 2),
+                "ate_actual": round(actual_intervention_outcome - actual_control_outcome, 2),
+                "ate_predicted": round(predicted_ate, 2),
+                "prediction_method": "intervention_outcome_conditioning",
+                "data_structure": "paired_arms"
+            }
+            
+        elif not intervention_arm.empty:
+            # Only intervention arm - predict what control would have been
+            actual_intervention_outcome = intervention_arm[self.target_variable].iloc[0]
+            
+            # Create virtual control features using intervention arm features but with intervention outcome
+            virtual_control_features = intervention_arm[available_features].copy()
+            virtual_control_features['intervention_outcome_feature'] = actual_intervention_outcome
+            virtual_control_features = virtual_control_features.fillna(0)
+            
+            predicted_control_outcome = model.predict(virtual_control_features)[0]
+            predicted_ate = actual_intervention_outcome - predicted_control_outcome
+            
+            logger.info(f"Target RCT intervention-only - predicting counterfactual control")
+            
+            prediction_details = {
+                "target_rct_id": self.target_rct_id,
+                "intervention_actual": round(actual_intervention_outcome, 2),
+                "control_predicted": round(predicted_control_outcome, 2),
+                "intervention_outcome_conditioning": round(actual_intervention_outcome, 2),
+                "ate_predicted": round(predicted_ate, 2),
+                "prediction_method": "counterfactual_control_prediction",
+                "data_structure": "intervention_only"
+            }
+            
         else:
-            predicted_ate = None
+            raise ValueError(f"Target RCT {self.target_rct_id} has no intervention arm")
         
         # Create the required output format
         predictions = {
             "predicted_outcome_control_arm": round(predicted_control_outcome, 2),
-            "predicted_ate": round(predicted_ate, 2) if predicted_ate is not None else None,
-            "actual_intervention_outcome": round(actual_intervention_outcome, 2) if actual_intervention_outcome is not None else None,
-            "prediction_details": {
-                "target_rct_id": target_rct_data[self.rct_id_col].iloc[0],
-                "intervention_actual": round(actual_intervention_outcome, 2) if actual_intervention_outcome is not None else None,
-                "control_predicted": round(predicted_control_outcome, 2),
-                "ate_calculation": f"{actual_intervention_outcome} - {predicted_control_outcome:.2f} = {predicted_ate:.2f}" if predicted_ate is not None else "Cannot calculate ATE: missing intervention outcome"
-            }
+            "predicted_ate": round(predicted_ate, 2),
+            "prediction_details": prediction_details
         }
         
         return predictions
@@ -346,7 +478,9 @@ def main():
     
     # Save to specified output file if provided
     if args.output:
-        os.makedirs(os.path.dirname(args.output), exist_ok=True)
+        output_dir = os.path.dirname(args.output)
+        if output_dir:  # Only create directory if there is one
+            os.makedirs(output_dir, exist_ok=True)
         with open(args.output, 'w') as f:
             json.dump(results, f, indent=2, default=str)
         logger.info(f"Results saved to {args.output}")
@@ -368,7 +502,10 @@ def main():
         details = results['prediction_details']
         if details.get('intervention_actual') is not None:
             print(f"  Actual Intervention Outcome: {details['intervention_actual']} months")
+        if details.get('ate_calculation'):
             print(f"  ATE Calculation: {details['ate_calculation']}")
+        elif details.get('ate_predicted') is not None:
+            print(f"  ATE (Predicted): {details['ate_predicted']} months")
     
     print("="*60)
 
